@@ -2,9 +2,11 @@
  # by R. Chandra
  #Source: https://github.com/rohitash-chandra/logistic_regression
 
-from math import exp
 import numpy as np
 import random
+import math
+
+from math import exp
 
 SIGMOID = 1
 STEP = 2
@@ -27,12 +29,6 @@ class logistic_regression:
 		self.max_epoch = num_epocs
 		self.use_activation = SIGMOID #SIGMOID # 1 is  sigmoid , 2 is step, 3 is linear 
 		self.out_delta = np.zeros(self.num_outputs)
-
-		print(self.w, ' self.w init') 
-		print(self.b, ' self.b init') 
-		print(self.out_delta, ' outdel init')
-
-
  
 	def activation_func(self,z_vec):
 		if self.use_activation == SIGMOID:
@@ -50,308 +46,195 @@ class logistic_regression:
 		output = self.activation_func(z_vec) # Output  
 		return output
 	
-	def gradient(self, x_vec, output, actual):   
+
+
+	def squared_error(self, prediction, actual):
+		return  np.sum(np.square(prediction - actual))/prediction.shape[0]# to cater more in one output/class
+ 
+	def encode(self, w): # get  the parameters and encode into the model
+		 
+		self.w =  w[0:self.num_features]
+		self.b = w[self.num_features] 
+
+	def evaluate_proposal(self, data, w):  # BP with SGD (Stocastic BP)
+
+		self.encode(w)  # method to encode w and b
+		fx = np.zeros(data.shape[0]) 
+
+		for s in range(0, data.shape[0]):  
+				i = random.randint(0, data.shape[0]-1)
+				input_instance  =  data[i,0:self.num_features]  
+				actual  = data[i,self.num_features:]  
+				prediction = self.predict(input_instance)  
+				fx[s] = prediction
+
+		return fx
+
+	def gradient(self, x_vec, output, actual):  # not used in case of Random Walk proposals in MCMC 
 		if self.use_activation == SIGMOID :
 			out_delta =   (output - actual)*(output*(1-output)) 
 		else: # for linear and step function  
 			out_delta =   (output - actual) 
 		return out_delta
 
-	def update(self, x_vec, output, actual):      
+	def update(self, x_vec, output, actual):      # not used by MCMC alg
 		self.w+= self.learn_rate *( x_vec *  self.out_delta)
 		self.b+=  (1 * self.learn_rate * self.out_delta)
+ 	
  
-
-	def squared_error(self, prediction, actual):
-		return  np.sum(np.square(prediction - actual))/prediction.shape[0]# to cater more in one output/class
- 
-
-
-	def test_model(self, data, tolerance):  
-
-		num_instances = data.shape[0]
-
-		class_perf = 0
-		sum_sqer = 0   
-		for s in range(0, num_instances):	
-
-			input_instance  =  self.train_data[s,0:self.num_features] 
-			actual  = self.train_data[s,self.num_features:]  
-			prediction = self.predict(input_instance) 
-			sum_sqer += self.squared_error(prediction, actual)
-
-			pred_binary = np.where(prediction > (1 - tolerance), 1, 0)
-
-			print(s, actual, prediction, pred_binary, sum_sqer, ' s, actual, prediction, sum_sqer')
-
- 
-
-			if( np.sum(actual-pred_binary)==0):
-				class_perf =  class_perf +1  
-
-		rmse = np.sqrt(sum_sqer/num_instances)
-
-		percentage_correct = float(class_perf/num_instances) * 100 
-
-		print(percentage_correct, rmse,  ' class_perf, rmse') 
-		# note RMSE is not a good measure for multi-class probs
-
-		return ( rmse, percentage_correct)
-
-
-
-
-
- 
-	def SGD(self):   
-		
-			epoch = 0 
-			shuffle = True
-
-			while  epoch < self.max_epoch:
-				sum_sqer = 0
-				for s in range(0, self.num_train): 
-
-					if shuffle ==True:
-						i = random.randint(0, self.num_train-1)
-
-					input_instance  =  self.train_data[i,0:self.num_features]  
-					actual  = self.train_data[i,self.num_features:]  
-					prediction = self.predict(input_instance) 
-					sum_sqer += self.squared_error(prediction, actual)
-					self.out_delta = self.gradient( input_instance, prediction, actual)    # major difference when compared to GD
-					#print(input_instance, prediction, actual, s, sum_sqer)
-					self.update(input_instance, prediction, actual)
-
-			
-				print(epoch, sum_sqer, self.w, self.b)
-				epoch=epoch+1  
-
-			rmse_train, train_perc = self.test_model(self.train_data, 0.3) 
-			rmse_test =0
-			test_perc =0
-			#rmse_test, test_perc = self.test_model(self.test_data, 0.3)
-  
-			return (train_perc, test_perc, rmse_train, rmse_test) 
-				
-
-	def GD(self):   
-		
-			epoch = 0 
-			while  epoch < self.max_epoch:
-				sum_sqer = 0
-				for s in range(0, self.num_train): 
-					input_instance  =  self.train_data[s,0:self.num_features]  
-					actual  = self.train_data[s,self.num_features:]   
-					prediction = self.predict(input_instance) 
-					sum_sqer += self.squared_error(prediction, actual) 
-					self.out_delta+= self.gradient( input_instance, prediction, actual)    # this is major difference when compared with SGD
-
-					#print(input_instance, prediction, actual, s, sum_sqer)
-				self.update(input_instance, prediction, actual)
-
-			
-				print(epoch, sum_sqer, self.w, self.b)
-				epoch=epoch+1  
-
-			rmse_train, train_perc = self.test_model(self.train_data, 0.3) 
-			rmse_test =0
-			test_perc =0
-			#rmse_test, test_perc = self.test_model(self.test_data, 0.3)
-  
-			return (train_perc, test_perc, rmse_train, rmse_test) 
-				
-	
- 
-
-
-
-
-
-
 
 #------------------------------------------------------------------
 
 
 class MCMC:
-    def __init__(self, samples, traindata, testdata, topology):
-        self.samples = samples  # NN topology [input, hidden, output]
-        self.topology = topology  # max epocs
-        self.traindata = traindata  #
-        self.testdata = testdata
-        random.seed()
-	 
+	def __init__(self, samples, traindata, testdata, topology):
+		self.samples = samples  # NN topology [input, hidden, output]
+		self.topology = topology  # max epocs
+		self.traindata = traindata  #
+		self.testdata = testdata
+		random.seed() 
 
-        # ----------------
+	def rmse(self, predictions, targets):
+		return np.sqrt(((predictions - targets) ** 2).mean())
 
-    def rmse(self, predictions, targets):
-        return np.sqrt(((predictions - targets) ** 2).mean())
+	def likelihood_func(self, model, data, w, tausq):
+		y = data[:, self.topology[0]]
+		fx = model.evaluate_proposal(data, w)
+		rmse = self.rmse(fx, y)
+		loss = -0.5 * np.log(2 * math.pi * tausq) - 0.5 * np.square(y - fx) / tausq
+		return [np.sum(loss), fx, rmse]
 
-    def likelihood_func(self, neuralnet, data, w, tausq):
-        y = data[:, self.topology[0]]
-        fx = neuralnet.evaluate_proposal(data, w)
-        rmse = self.rmse(fx, y)
-        loss = -0.5 * np.log(2 * math.pi * tausq) - 0.5 * np.square(y - fx) / tausq
-        return [np.sum(loss), fx, rmse]
+	def prior_likelihood(self, sigma_squared, nu_1, nu_2, w, tausq): 
+		param = self.topology[0]  + 1 # number of parameters in model
+		part1 = -1 * (param / 2) * np.log(sigma_squared)
+		part2 = 1 / (2 * sigma_squared) * (sum(np.square(w)))
+		log_loss = part1 - part2 - (1 + nu_1) * np.log(tausq) - (nu_2 / tausq)
+		return log_loss
 
-    def prior_likelihood(self, sigma_squared, nu_1, nu_2, w, tausq):
-        h = self.topology[1]  # number hidden neurons
-        d = self.topology[0]  # number input neurons
-        part1 = -1 * ((d * h + h + 2) / 2) * np.log(sigma_squared)
-        part2 = 1 / (2 * sigma_squared) * (sum(np.square(w)))
-        log_loss = part1 - part2 - (1 + nu_1) * np.log(tausq) - (nu_2 / tausq)
-        return log_loss
+	def sampler(self):
 
-    def sampler(self):
+		# ------------------- initialize MCMC
+		testsize = self.testdata.shape[0]
+		trainsize = self.traindata.shape[0]
+		samples = self.samples
 
-        # ------------------- initialize MCMC
-        testsize = self.testdata.shape[0]
-        trainsize = self.traindata.shape[0]
-        samples = self.samples
+		x_test = np.linspace(0, 1, num=testsize)
+		x_train = np.linspace(0, 1, num=trainsize)
 
-        x_test = np.linspace(0, 1, num=testsize)
-        x_train = np.linspace(0, 1, num=trainsize)
+		#self.topology  # [input,   output]
+		y_test = self.testdata[:, self.topology[0]]
+		y_train = self.traindata[:, self.topology[0]]
+	  
+		w_size = self.topology[0]  + self.topology[1]  # num of weights and bias (eg. 4 + 1 in case of time series problems used)
 
-        netw = self.topology  # [input, hidden, output]
-        y_test = self.testdata[:, netw[0]]
-        y_train = self.traindata[:, netw[0]]
-        print y_train.size
-        print y_test.size
+		pos_w = np.ones((samples, w_size))  # posterior of all weights and bias over all samples
+		pos_tau = np.ones((samples, 1))
 
-        w_size = (netw[0] * netw[1]) + (netw[1] * netw[2]) + netw[1] + netw[2]  # num of weights and bias
+		fxtrain_samples = np.ones((samples, trainsize))  # fx of train data over all samples
+		fxtest_samples = np.ones((samples, testsize))  # fx of test data over all samples
+		#rmse_train = np.zeros(samples)
+		#rmse_test = np.zeros(samples)
 
-        pos_w = np.ones((samples, w_size))  # posterior of all weights and bias over all samples
-        pos_tau = np.ones((samples, 1))
+		w = np.random.randn(w_size)
+		w_proposal = np.random.randn(w_size)
 
-        fxtrain_samples = np.ones((samples, trainsize))  # fx of train data over all samples
-        fxtest_samples = np.ones((samples, testsize))  # fx of test data over all samples
-        rmse_train = np.zeros(samples)
-        rmse_test = np.zeros(samples)
+		step_w = 0.02;  # defines how much variation you need in changes to w
+		step_eta = 0.01;  
+		# eta is an additional parameter to cater for noise in predictions (Gaussian likelihood). 
+		# note eta is used as tau in the sampler to consider log scale. 
+		# eta is not used in multinomial likelihood. 
+ 
 
-        w = np.random.randn(w_size)
-        w_proposal = np.random.randn(w_size)
+		model = logistic_regression(0 ,  self.traindata, self.testdata, self.topology[0], 0.1) 
 
-        step_w = 0.02;  # defines how much variation you need in changes to w
-        step_eta = 0.01;
-        # --------------------- Declare FNN and initialize
+		pred_train = model.evaluate_proposal(self.traindata, w)
+		pred_test = model.evaluate_proposal(self.testdata, w)
 
-        neuralnet = Network(self.topology, self.traindata, self.testdata)
-        print 'evaluate Initial w'
+		eta = np.log(np.var(pred_train - y_train))
+		tau_pro = np.exp(eta)
 
-        pred_train = neuralnet.evaluate_proposal(self.traindata, w)
-        pred_test = neuralnet.evaluate_proposal(self.testdata, w)
+		print('evaluate Initial w')
 
-        eta = np.log(np.var(pred_train - y_train))
-        tau_pro = np.exp(eta)
+		sigma_squared = 5  # considered by looking at distribution of  similar trained  models - i.e distribution of weights and bias
+		nu_1 = 0
+		nu_2 = 0
 
-        sigma_squared = 25
-        nu_1 = 0
-        nu_2 = 0
+		prior_likelihood = self.prior_likelihood(sigma_squared, nu_1, nu_2, w, tau_pro)  # takes care of the gradients
 
-        prior_likelihood = self.prior_likelihood(sigma_squared, nu_1, nu_2, w, tau_pro)  # takes care of the gradients
+		[likelihood, pred_train, rmsetrain] = self.likelihood_func(model, self.traindata, w, tau_pro)
 
-        [likelihood, pred_train, rmsetrain] = self.likelihood_func(neuralnet, self.traindata, w, tau_pro)
-        [likelihood_ignore, pred_test, rmsetest] = self.likelihood_func(neuralnet, self.testdata, w, tau_pro)
-
-        print likelihood
-
-        naccept = 0
-        print 'begin sampling using mcmc random walk'
-        plt.plot(x_train, y_train)
-        plt.plot(x_train, pred_train)
-        plt.title("Plot of Data vs Initial Fx")
-        plt.savefig('mcmcresults/begin.png')
-        plt.clf()
-
-        plt.plot(x_train, y_train)
-
-        for i in range(samples - 1):
-
-            w_proposal = w + np.random.normal(0, step_w, w_size)
-
-            eta_pro = eta + np.random.normal(0, step_eta, 1)
-            tau_pro = math.exp(eta_pro)
-
-            [likelihood_proposal, pred_train, rmsetrain] = self.likelihood_func(neuralnet, self.traindata, w_proposal,
-                                                                                tau_pro)
-            [likelihood_ignore, pred_test, rmsetest] = self.likelihood_func(neuralnet, self.testdata, w_proposal,
-                                                                            tau_pro)
-
-            # likelihood_ignore  refers to parameter that will not be used in the alg.
-
-            prior_prop = self.prior_likelihood(sigma_squared, nu_1, nu_2, w_proposal,
-                                               tau_pro)  # takes care of the gradients
-
-            diff_likelihood = likelihood_proposal - likelihood
-            diff_priorliklihood = prior_prop - prior_likelihood
-
-            mh_prob = min(1, math.exp(diff_likelihood + diff_priorliklihood))
-
-            u = random.uniform(0, 1)
-
-            if u < mh_prob:
-                # Update position
-                print    i, ' is accepted sample'
-                naccept += 1
-                likelihood = likelihood_proposal
-                prior_likelihood = prior_prop
-                w = w_proposal
-                eta = eta_pro
-
-                print  likelihood, prior_likelihood, rmsetrain, rmsetest, w, 'accepted'
-
-                pos_w[i + 1,] = w_proposal
-                pos_tau[i + 1,] = tau_pro
-                fxtrain_samples[i + 1,] = pred_train
-                fxtest_samples[i + 1,] = pred_test
-                rmse_train[i + 1,] = rmsetrain
-                rmse_test[i + 1,] = rmsetest
-
-                plt.plot(x_train, pred_train)
+		print(likelihood, ' initial likelihood')
+		[likelihood_ignore, pred_test, rmsetest] = self.likelihood_func(model, self.testdata, w, tau_pro)
 
 
-            else:
-                pos_w[i + 1,] = pos_w[i,]
-                pos_tau[i + 1,] = pos_tau[i,]
-                fxtrain_samples[i + 1,] = fxtrain_samples[i,]
-                fxtest_samples[i + 1,] = fxtest_samples[i,]
-                rmse_train[i + 1,] = rmse_train[i,]
-                rmse_test[i + 1,] = rmse_test[i,]
+		naccept = 0  
 
-                # print i, 'rejected and retained'
+		for i in range(samples - 1):
 
-        print naccept, ' num accepted'
-        print naccept / (samples * 1.0), '% was accepted'
-        accept_ratio = naccept / (samples * 1.0) * 100
+			w_proposal = w + np.random.normal(0, step_w, w_size)
 
-        plt.title("Plot of Accepted Proposals")
-        plt.savefig('mcmcresults/proposals.png')
-        plt.savefig('mcmcresults/proposals.svg', format='svg', dpi=600)
-        plt.clf()
+			eta_pro = eta + np.random.normal(0, step_eta, 1)
+			tau_pro = math.exp(eta_pro)
 
-        return (pos_w, pos_tau, fxtrain_samples, fxtest_samples, x_train, x_test, rmse_train, rmse_test, accept_ratio)
+			[likelihood_proposal, pred_train, rmsetrain] = self.likelihood_func(model, self.traindata, w_proposal, tau_pro)
+			[likelihood_ignore, pred_test, rmsetest] = self.likelihood_func(model, self.testdata, w_proposal, tau_pro)
 
+			# likelihood_ignore  refers to parameter that will not be used in the alg.
 
+			prior_prop = self.prior_likelihood(sigma_squared, nu_1, nu_2, w_proposal, tau_pro)  # takes care of the gradients
 
+			diff_likelihood = likelihood_proposal - likelihood # since we using log scale: based on https://www.rapidtables.com/math/algebra/Logarithm.html
+			diff_priorliklihood = prior_prop - prior_likelihood
 
+			mh_prob = min(1, math.exp(diff_likelihood + diff_priorliklihood))
 
+			u = random.uniform(0, 1)
 
+			if u < mh_prob:
+				# Update position
+				print    (i, ' is accepted sample')
+				naccept += 1
+				likelihood = likelihood_proposal
+				prior_likelihood = prior_prop
+				w = w_proposal
+				eta = eta_pro
 
+				print (likelihood, prior_likelihood, rmsetrain, rmsetest, w, 'accepted')
 
+				pos_w[i + 1,] = w_proposal
+				pos_tau[i + 1,] = tau_pro
+				fxtrain_samples[i + 1,] = pred_train
+				fxtest_samples[i + 1,] = pred_test 
 
+			else:
+				pos_w[i + 1,] = pos_w[i,]
+				pos_tau[i + 1,] = pos_tau[i,]
+				fxtrain_samples[i + 1,] = fxtrain_samples[i,]
+				fxtest_samples[i + 1,] = fxtest_samples[i,] 
 
+		print(naccept, ' num accepted')
+		print(naccept / (samples * 1.0), '% was accepted')
+		accept_ratio = naccept / (samples * 1.0) * 100
+ 
+
+		rmse_train = 0
+		rmse_test = 0
+
+		return (pos_w, pos_tau, fxtrain_samples, fxtest_samples, rmse_train, rmse_test, accept_ratio)
+
+ 
 
 def main():
   
 
-    outres = open('results.txt', 'w')
+	outres = open('results.txt', 'w')
 
-    problem =1
+	problem =1
 
-    for problem in xrange(2, 3): 
+	for problem in range(3, 4): 
  
 
-        if problem == 0:
+		if problem == 0:
 
 			 
 			dataset = [[2.7810836,2.550537003,0],
@@ -374,194 +257,111 @@ def main():
 
 	  
 
-        if problem == 1:
-            traindata = np.loadtxt("data/Lazer/train.txt")
-            testdata = np.loadtxt("data/Lazer/test.txt")  
+		if problem == 1:
+			traindata = np.loadtxt("data/Lazer/train.txt")
+			testdata = np.loadtxt("data/Lazer/test.txt")  
 
 			classi_reg = False  # true for classification and false for regression
 			features = 4  #
 			output = 1
 #
-        if problem == 2:
-            traindata = np.loadtxt("data/Sunspot/train.txt")
-            testdata = np.loadtxt("data/Sunspot/test.txt")  #
+		if problem == 2:
+			traindata = np.loadtxt("data/Sunspot/train.txt")
+			testdata = np.loadtxt("data/Sunspot/test.txt")  #
 
 			classi_reg = False  # true for classification and false for regression
 			features = 4  #
 			output = 1
 
-        if problem == 3:
-            traindata = np.loadtxt("data/Mackey/train.txt")
-            testdata = np.loadtxt("data/Mackey/test.txt")  # 
+		if problem == 3:
+			traindata = np.loadtxt("data/Mackey/train.txt")
+			testdata = np.loadtxt("data/Mackey/test.txt")  # 
 			classi_reg = False  # true for classification and false for regression
 			features = 4  #
 			output = 1
 
 
-        print(traindata)
+		print(traindata)
 
-        topology = [features, output]
+		topology = [features, output]
 
-        MinCriteria = 0.005  # stop when RMSE reaches MinCriteria ( problem dependent)
+		MinCriteria = 0.005  # stop when RMSE reaches MinCriteria ( problem dependent)
 
-        random.seed(time.time())
 
-        numSamples = 80000  # need to decide yourself
+		numSamples = 10000  # need to decide yourself
 
-        mcmc = MCMC(numSamples, traindata, testdata, topology)  # declare class
+		mcmc = MCMC(numSamples, traindata, testdata, topology)  # declare class
 
-        [pos_w, pos_tau, fx_train, fx_test, x_train, x_test, rmse_train, rmse_test, accept_ratio] = mcmc.sampler()
-        print 'sucessfully sampled'
+		[pos_w, pos_tau, fx_train, fx_test,   rmse_train, rmse_test, accept_ratio] = mcmc.sampler()
+		print('sucessfully sampled')
 
-        burnin = 0.1 * numSamples  # use post burn in samples
+		burnin = 0.25 * numSamples  # use post burn in samples
 
-        pos_w = pos_w[int(burnin):, ]
-        pos_tau = pos_tau[int(burnin):, ]
+		pos_w = pos_w[int(burnin):, ]
+		pos_tau = pos_tau[int(burnin):, ]
 
-        fx_mu = fx_test.mean(axis=0)
-        fx_high = np.percentile(fx_test, 95, axis=0)
-        fx_low = np.percentile(fx_test, 5, axis=0)
+		fx_mu = fx_test.mean(axis=0)
+		fx_high = np.percentile(fx_test, 95, axis=0)
+		fx_low = np.percentile(fx_test, 5, axis=0)
 
-        fx_mu_tr = fx_train.mean(axis=0)
-        fx_high_tr = np.percentile(fx_train, 95, axis=0)
-        fx_low_tr = np.percentile(fx_train, 5, axis=0)
+		fx_mu_tr = fx_train.mean(axis=0)
+		fx_high_tr = np.percentile(fx_train, 95, axis=0)
+		fx_low_tr = np.percentile(fx_train, 5, axis=0)
 
-        rmse_tr = np.mean(rmse_train[int(burnin):])
-        rmsetr_std = np.std(rmse_train[int(burnin):])
-        rmse_tes = np.mean(rmse_test[int(burnin):])
-        rmsetest_std = np.std(rmse_test[int(burnin):])
-        print rmse_tr, rmsetr_std, rmse_tes, rmsetest_std
-        np.savetxt(outres, (rmse_tr, rmsetr_std, rmse_tes, rmsetest_std, accept_ratio), fmt='%1.5f')
+		rmse_tr = np.mean(rmse_train[int(burnin):])
+		rmsetr_std = np.std(rmse_train[int(burnin):])
+		rmse_tes = np.mean(rmse_test[int(burnin):])
+		rmsetest_std = np.std(rmse_test[int(burnin):])
+		print(rmse_tr, rmsetr_std, rmse_tes, rmsetest_std)
+		np.savetxt(outres, (rmse_tr, rmsetr_std, rmse_tes, rmsetest_std, accept_ratio), fmt='%1.5f')
 
-        ytestdata = testdata[:, input]
-        ytraindata = traindata[:, input]
+		ytestdata = testdata[:, input]
+		ytraindata = traindata[:, input]
 
-        plt.plot(x_test, ytestdata, label='actual')
-        plt.plot(x_test, fx_mu, label='pred. (mean)')
-        plt.plot(x_test, fx_low, label='pred.(5th percen.)')
-        plt.plot(x_test, fx_high, label='pred.(95th percen.)')
-        plt.fill_between(x_test, fx_low, fx_high, facecolor='g', alpha=0.4)
-        plt.legend(loc='upper right')
+		if classi_reg == False:
 
-        plt.title("Plot of Test Data vs MCMC Uncertainty ")
-        plt.savefig('mcmcresults/mcmcrestest.png')
-        plt.savefig('mcmcresults/mcmcrestest.svg', format='svg', dpi=600)
-        plt.clf()
-        # -----------------------------------------
-        plt.plot(x_train, ytraindata, label='actual')
-        plt.plot(x_train, fx_mu_tr, label='pred. (mean)')
-        plt.plot(x_train, fx_low_tr, label='pred.(5th percen.)')
-        plt.plot(x_train, fx_high_tr, label='pred.(95th percen.)')
-        plt.fill_between(x_train, fx_low_tr, fx_high_tr, facecolor='g', alpha=0.4)
-        plt.legend(loc='upper right')
+			plt.plot(x_test, ytestdata, label='actual')
+			plt.plot(x_test, fx_mu, label='pred. (mean)')
+			plt.plot(x_test, fx_low, label='pred.(5th percen.)')
+			plt.plot(x_test, fx_high, label='pred.(95th percen.)')
+			plt.fill_between(x_test, fx_low, fx_high, facecolor='g', alpha=0.4)
+			plt.legend(loc='upper right')
 
-        plt.title("Plot of Train Data vs MCMC Uncertainty ")
-        plt.savefig('mcmcresults/mcmcrestrain.png')
-        plt.savefig('mcmcresults/mcmcrestrain.svg', format='svg', dpi=600)
-        plt.clf()
+			plt.title("Plot of Test Data vs MCMC Uncertainty ")
+			plt.savefig('mcmcresults/mcmcrestest.png')
+			plt.savefig('mcmcresults/mcmcrestest.svg', format='svg', dpi=600)
+			plt.clf()
+			# -----------------------------------------
+			plt.plot(x_train, ytraindata, label='actual')
+			plt.plot(x_train, fx_mu_tr, label='pred. (mean)')
+			plt.plot(x_train, fx_low_tr, label='pred.(5th percen.)')
+			plt.plot(x_train, fx_high_tr, label='pred.(95th percen.)')
+			plt.fill_between(x_train, fx_low_tr, fx_high_tr, facecolor='g', alpha=0.4)
+			plt.legend(loc='upper right')
 
-        mpl_fig = plt.figure()
-        ax = mpl_fig.add_subplot(111)
+			plt.title("Plot of Train Data vs MCMC Uncertainty ")
+			plt.savefig('mcmcresults/mcmcrestrain.png')
+			plt.savefig('mcmcresults/mcmcrestrain.svg', format='svg', dpi=600)
+			plt.clf()
 
-        ax.boxplot(pos_w)
+		mpl_fig = plt.figure()
+		ax = mpl_fig.add_subplot(111)
 
-        ax.set_xlabel('[W1] [B1] [W2] [B2]')
-        ax.set_ylabel('Posterior')
+		ax.boxplot(pos_w)
 
-        plt.legend(loc='upper right')
+		ax.set_xlabel('[W1] [B1] [W2] [B2]')
+		ax.set_ylabel('Posterior')
 
-        plt.title("Boxplot of Posterior W (weights and biases)")
-        plt.savefig('mcmcresults/w_pos.png')
-        plt.savefig('mcmcresults/w_pos.svg', format='svg', dpi=600)
+		plt.legend(loc='upper right')
 
-        plt.clf()
+		plt.title("Boxplot of Posterior W (weights and biases)")
+		plt.savefig('mcmcresults/w_pos.png')
+		plt.savefig('mcmcresults/w_pos.svg', format='svg', dpi=600)
+
+		plt.clf()
 
 
 if __name__ == "__main__": main()
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-'''def main(): 
-
-	random.seed()
-	 
-
-	 
-	dataset = [[2.7810836,2.550537003,0],
-		[1.465489372,2.362125076,0],
-		[3.396561688,4.400293529,0],
-		[1.38807019,1.850220317,0],
-		[3.06407232,3.005305973,0],
-		[7.627531214,2.759262235,1],
-		[5.332441248,2.088626775,1],
-		[6.922596716,1.77106367,1],
-		[8.675418651,-0.242068655,1],
-		[7.673756466,3.508563011,1]]
-
-
-	train_data = np.asarray(dataset) # convert list data to numpy
-	test_data = train_data
-
-	 
-
-	learn_rate = 0.3
-	num_features = 2
-	num_epocs = 20
-
-	print(train_data)
-	 
-
-	lreg = logistic_regression(num_epocs, train_data, test_data, num_features, learn_rate)
-	(train_perc, test_perc, rmse_train, rmse_test) = lreg.SGD()
-	(train_perc, test_perc, rmse_train, rmse_test) = lreg.GD() 
-	 
-
-	#-------------------------------
-	#xor data
-
-
-	xor_dataset= [[0,0,0],
-		[0,1,1],
-		[1,0,1],
-		[1,1,0] ]
-
-	xor_data = np.asarray(xor_dataset) # convert list data to numpy
-
-
-
-	num_epocs = 20
-	learn_rate = 0.9
-	num_features = 2
-
-	lreg = logistic_regression(num_epocs, xor_data, xor_data, num_features, learn_rate)
-	(train_perc, test_perc, rmse_train, rmse_test) = lreg.SGD()
-	(train_perc, test_perc, rmse_train, rmse_test) = lreg.GD() 
-
-
-if __name__ == "__main__": main()'''
+ 
