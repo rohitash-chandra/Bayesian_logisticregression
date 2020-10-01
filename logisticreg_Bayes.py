@@ -1,23 +1,21 @@
  
  # by R. Chandra
- #Source: https://github.com/rohitash-chandra/logistic_regression
+ #https://github.com/rohitash-chandra/Bayesian_logisticregression
 
 import numpy as np
 import random
 import math
 
-from math import exp
+import matplotlib.pyplot as plt
 
-SIGMOID = 1
-STEP = 2
-LINEAR = 3
+from math import exp
 
  
 random.seed()
 
 class logistic_regression:
 
-	def __init__(self, num_epocs, train_data, test_data, num_features, learn_rate):
+	def __init__(self, num_epocs, train_data, test_data, num_features, learn_rate, activation):
 		self.train_data = train_data
 		self.test_data = test_data 
 		self.num_features = num_features
@@ -27,17 +25,15 @@ class logistic_regression:
 		self.b = np.random.uniform(-0.5, 0.5, self.num_outputs) 
 		self.learn_rate = learn_rate
 		self.max_epoch = num_epocs
-		self.use_activation = SIGMOID #SIGMOID # 1 is  sigmoid , 2 is step, 3 is linear 
+		self.use_activation = activation #SIGMOID # 1 is  sigmoid , 2 is step, 3 is linear 
 		self.out_delta = np.zeros(self.num_outputs)
+		self.activation = activation
  
 	def activation_func(self,z_vec):
-		if self.use_activation == SIGMOID:
+		if self.use_activation == False:
 			y =  1 / (1 + np.exp(z_vec)) # sigmoid/logistic
-		elif self.use_activation == STEP:
-			y = (z_vec > 0).astype(int) # if greater than 0, use 1, else 0
-			#https://stackoverflow.com/questions/32726701/convert-real-valued-numpy-array-to-binary-array-by-sign
 		else:
-			y = z_vec
+			y = z_vec 
 		return y
  
 
@@ -62,7 +58,7 @@ class logistic_regression:
 		fx = np.zeros(data.shape[0]) 
 
 		for s in range(0, data.shape[0]):  
-				i = random.randint(0, data.shape[0]-1)
+				i = s #random.randint(0, data.shape[0]-1)  (we dont shuffle in this implementation)
 				input_instance  =  data[i,0:self.num_features]  
 				actual  = data[i,self.num_features:]  
 				prediction = self.predict(input_instance)  
@@ -70,7 +66,7 @@ class logistic_regression:
 
 		return fx
 
-	def gradient(self, x_vec, output, actual):  # not used in case of Random Walk proposals in MCMC 
+	'''def gradient(self, x_vec, output, actual):  # not used in case of Random Walk proposals in MCMC 
 		if self.use_activation == SIGMOID :
 			out_delta =   (output - actual)*(output*(1-output)) 
 		else: # for linear and step function  
@@ -79,30 +75,35 @@ class logistic_regression:
 
 	def update(self, x_vec, output, actual):      # not used by MCMC alg
 		self.w+= self.learn_rate *( x_vec *  self.out_delta)
-		self.b+=  (1 * self.learn_rate * self.out_delta)
- 	
+		self.b+=  (1 * self.learn_rate * self.out_delta)'''
+	
  
 
 #------------------------------------------------------------------
 
 
 class MCMC:
-	def __init__(self, samples, traindata, testdata, topology):
+	def __init__(self, samples, traindata, testdata, topology, regression):
 		self.samples = samples  # NN topology [input, hidden, output]
 		self.topology = topology  # max epocs
 		self.traindata = traindata  #
 		self.testdata = testdata
 		random.seed() 
+		self.regression = regression # False means classification
+
 
 	def rmse(self, predictions, targets):
 		return np.sqrt(((predictions - targets) ** 2).mean())
+ 
 
 	def likelihood_func(self, model, data, w, tausq):
+
 		y = data[:, self.topology[0]]
-		fx = model.evaluate_proposal(data, w)
-		rmse = self.rmse(fx, y)
+		fx = model.evaluate_proposal(data, w) 
+		accuracy = self.rmse(fx, y) #RMSE 
 		loss = -0.5 * np.log(2 * math.pi * tausq) - 0.5 * np.square(y - fx) / tausq
-		return [np.sum(loss), fx, rmse]
+		 
+		return [np.sum(loss), fx, accuracy]
 
 	def prior_likelihood(self, sigma_squared, nu_1, nu_2, w, tausq): 
 		param = self.topology[0]  + 1 # number of parameters in model
@@ -132,8 +133,8 @@ class MCMC:
 
 		fxtrain_samples = np.ones((samples, trainsize))  # fx of train data over all samples
 		fxtest_samples = np.ones((samples, testsize))  # fx of test data over all samples
-		#rmse_train = np.zeros(samples)
-		#rmse_test = np.zeros(samples)
+		rmse_train = np.zeros(samples)
+		rmse_test = np.zeros(samples)
 
 		w = np.random.randn(w_size)
 		w_proposal = np.random.randn(w_size)
@@ -145,7 +146,7 @@ class MCMC:
 		# eta is not used in multinomial likelihood. 
  
 
-		model = logistic_regression(0 ,  self.traindata, self.testdata, self.topology[0], 0.1) 
+		model = logistic_regression(0 ,  self.traindata, self.testdata, self.topology[0], 0.1, self.regression) 
 
 		pred_train = model.evaluate_proposal(self.traindata, w)
 		pred_test = model.evaluate_proposal(self.testdata, w)
@@ -192,14 +193,17 @@ class MCMC:
 
 			if u < mh_prob:
 				# Update position
-				print    (i, ' is accepted sample')
+				#print    (i, ' is accepted sample')
 				naccept += 1
 				likelihood = likelihood_proposal
 				prior_likelihood = prior_prop
 				w = w_proposal
 				eta = eta_pro
+				rmse_train[i + 1,] = rmsetrain
+				rmse_test[i + 1,] = rmsetest
 
-				print (likelihood, prior_likelihood, rmsetrain, rmsetest, w, 'accepted')
+
+				#print (likelihood, prior_likelihood, rmsetrain, rmsetest, w, 'accepted')
 
 				pos_w[i + 1,] = w_proposal
 				pos_tau[i + 1,] = tau_pro
@@ -211,16 +215,87 @@ class MCMC:
 				pos_tau[i + 1,] = pos_tau[i,]
 				fxtrain_samples[i + 1,] = fxtrain_samples[i,]
 				fxtest_samples[i + 1,] = fxtest_samples[i,] 
+				rmse_train[i + 1,] = rmse_train[i,]
+				rmse_test[i + 1,] = rmse_test[i,]
 
-		print(naccept, ' num accepted')
-		print(naccept / (samples * 1.0), '% was accepted')
+		 
 		accept_ratio = naccept / (samples * 1.0) * 100
+
+
+		print(accept_ratio, '% was accepted')
+
+		burnin = 0.25 * samples  # use post burn in samples
+
+		pos_w = pos_w[int(burnin):, ]
+		pos_tau = pos_tau[int(burnin):, ] 
+		rmse_train = rmse_train[int(burnin):]
+		rmse_test = rmse_test[int(burnin):] 
+
+
+		rmse_tr = np.mean(rmse_train)
+		rmsetr_std = np.std(rmse_train)
+		rmse_tes = np.mean(rmse_test)
+		rmsetest_std = np.std(rmse_test)
+		print(rmse_tr, rmsetr_std, rmse_tes, rmsetest_std, ' rmse_tr, rmsetr_std, rmse_tes, rmsetest_std')
+
+
+		# let us next test the Bayesian model using the posterior distributions over n trials
+
+
+		num_trials = 100
+
+		accuracy = np.zeros(num_trials)
+
+		for i in range(num_trials):
+			#print(pos_w.mean(axis=0), pos_w.std(axis=0), ' pos w mean, pos w std')
+			w_drawn = np.random.normal(pos_w.mean(axis=0), pos_w.std(axis=0), w_size)
+			tausq_drawn = np.random.normal(pos_tau.mean(), pos_tau.std()) # a buf is present here - gives negative values at times
+
+			[loss, fx_,  accuracy[i]] = self.likelihood_func(model, self.testdata, w_drawn, tausq_drawn)
+
+			print(i, loss,  accuracy[i],  tausq_drawn , pos_tau.mean(), pos_tau.std(), ' posterior test ')
+
+		print(accuracy.mean(), accuracy.std(), ' is mean and std of accuracy rmse test')
+ 
  
 
-		rmse_train = 0
-		rmse_test = 0
-
 		return (pos_w, pos_tau, fxtrain_samples, fxtest_samples, rmse_train, rmse_test, accept_ratio)
+
+
+
+
+
+def histogram_trace(pos_points, fname): # this is function to plot (not part of class)
+		 
+		size = 15
+
+		plt.tick_params(labelsize=size)
+		params = {'legend.fontsize': size, 'legend.handlelength': 2}
+		plt.rcParams.update(params)
+		plt.grid(alpha=0.75)
+
+		plt.hist(pos_points,  bins = 20, color='#0504aa', alpha=0.7)   
+		plt.title("Posterior distribution ", fontsize = size)
+		plt.xlabel(' Parameter value  ', fontsize = size)
+		plt.ylabel(' Frequency ', fontsize = size) 
+		plt.tight_layout()  
+		plt.savefig(fname + '_posterior.png')
+		plt.clf()
+
+
+		plt.tick_params(labelsize=size)
+		params = {'legend.fontsize': size, 'legend.handlelength': 2}
+		plt.rcParams.update(params)
+		plt.grid(alpha=0.75) 
+		plt.plot(pos_points)   
+
+		plt.title("Parameter trace plot", fontsize = size)
+		plt.xlabel(' Number of Samples  ', fontsize = size)
+		plt.ylabel(' Parameter value ', fontsize = size)
+		plt.tight_layout()  
+		plt.savefig(fname  + '_trace.png')
+		plt.clf()
+
 
  
 
@@ -231,52 +306,28 @@ def main():
 
 	problem =1
 
-	for problem in range(3, 4): 
- 
 
-		if problem == 0:
+	activation = True  # true for sigmoid, false for linear
 
-			 
-			dataset = [[2.7810836,2.550537003,0],
-				[1.465489372,2.362125076,0],
-				[3.396561688,4.400293529,0],
-				[1.38807019,1.850220317,0],
-				[3.06407232,3.005305973,0],
-				[7.627531214,2.759262235,1],
-				[5.332441248,2.088626775,1],
-				[6.922596716,1.77106367,1],
-				[8.675418651,-0.242068655,1],
-				[7.673756466,3.508563011,1]]
-
-
-			traindata = np.asarray(dataset) # convert list data to numpy
-			testdata = train_data
-			classi_reg = True  # true for classification and false for regression
-			features = 2  #
-			output = 1
-
-	  
+	for problem in range(2, 3): 
+  
 
 		if problem == 1:
 			traindata = np.loadtxt("data/Lazer/train.txt")
 			testdata = np.loadtxt("data/Lazer/test.txt")  
 
-			classi_reg = False  # true for classification and false for regression
 			features = 4  #
 			output = 1
 #
 		if problem == 2:
 			traindata = np.loadtxt("data/Sunspot/train.txt")
-			testdata = np.loadtxt("data/Sunspot/test.txt")  #
-
-			classi_reg = False  # true for classification and false for regression
+			testdata = np.loadtxt("data/Sunspot/test.txt")  # 
 			features = 4  #
 			output = 1
 
 		if problem == 3:
 			traindata = np.loadtxt("data/Mackey/train.txt")
-			testdata = np.loadtxt("data/Mackey/test.txt")  # 
-			classi_reg = False  # true for classification and false for regression
+			testdata = np.loadtxt("data/Mackey/test.txt")  #  
 			features = 4  #
 			output = 1
 
@@ -288,17 +339,13 @@ def main():
 		MinCriteria = 0.005  # stop when RMSE reaches MinCriteria ( problem dependent)
 
 
-		numSamples = 10000  # need to decide yourself
+		numSamples = 5000 # need to decide yourself
 
-		mcmc = MCMC(numSamples, traindata, testdata, topology)  # declare class
+		mcmc = MCMC(numSamples, traindata, testdata, topology, activation)  # declare class
 
 		[pos_w, pos_tau, fx_train, fx_test,   rmse_train, rmse_test, accept_ratio] = mcmc.sampler()
 		print('sucessfully sampled')
-
-		burnin = 0.25 * numSamples  # use post burn in samples
-
-		pos_w = pos_w[int(burnin):, ]
-		pos_tau = pos_tau[int(burnin):, ]
+ 
 
 		fx_mu = fx_test.mean(axis=0)
 		fx_high = np.percentile(fx_test, 95, axis=0)
@@ -308,57 +355,65 @@ def main():
 		fx_high_tr = np.percentile(fx_train, 95, axis=0)
 		fx_low_tr = np.percentile(fx_train, 5, axis=0)
 
-		rmse_tr = np.mean(rmse_train[int(burnin):])
-		rmsetr_std = np.std(rmse_train[int(burnin):])
-		rmse_tes = np.mean(rmse_test[int(burnin):])
-		rmsetest_std = np.std(rmse_test[int(burnin):])
-		print(rmse_tr, rmsetr_std, rmse_tes, rmsetest_std)
+
+		rmse_tr = np.mean(rmse_train)
+		rmsetr_std = np.std(rmse_train)
+		rmse_tes = np.mean(rmse_test)
+		rmsetest_std = np.std(rmse_test)
+
 		np.savetxt(outres, (rmse_tr, rmsetr_std, rmse_tes, rmsetest_std, accept_ratio), fmt='%1.5f')
 
-		ytestdata = testdata[:, input]
-		ytraindata = traindata[:, input]
+		ytestdata = testdata[:, features]
+		ytraindata = traindata[:, features]
+		x_test = np.linspace(0, 1, num=testdata.shape[0])
+		x_train = np.linspace(0, 1, num=traindata.shape[0])
 
-		if classi_reg == False:
+		 
 
-			plt.plot(x_test, ytestdata, label='actual')
-			plt.plot(x_test, fx_mu, label='pred. (mean)')
-			plt.plot(x_test, fx_low, label='pred.(5th percen.)')
-			plt.plot(x_test, fx_high, label='pred.(95th percen.)')
-			plt.fill_between(x_test, fx_low, fx_high, facecolor='g', alpha=0.4)
-			plt.legend(loc='upper right')
+		plt.plot(x_test, ytestdata, label='actual')
+		plt.plot(x_test, fx_mu, label='pred. (mean)')
+		plt.plot(x_test, fx_low, label='pred.(5th percen.)')
+		plt.plot(x_test, fx_high, label='pred.(95th percen.)')
+		plt.fill_between(x_test, fx_low, fx_high, facecolor='g', alpha=0.4)
+		plt.legend(loc='upper right')
 
-			plt.title("Plot of Test Data vs MCMC Uncertainty ")
-			plt.savefig('mcmcresults/mcmcrestest.png')
-			plt.savefig('mcmcresults/mcmcrestest.svg', format='svg', dpi=600)
-			plt.clf()
-			# -----------------------------------------
-			plt.plot(x_train, ytraindata, label='actual')
-			plt.plot(x_train, fx_mu_tr, label='pred. (mean)')
-			plt.plot(x_train, fx_low_tr, label='pred.(5th percen.)')
-			plt.plot(x_train, fx_high_tr, label='pred.(95th percen.)')
-			plt.fill_between(x_train, fx_low_tr, fx_high_tr, facecolor='g', alpha=0.4)
-			plt.legend(loc='upper right')
+		plt.title("Test Data Uncertainty ")
+		plt.savefig('mcmctest.png') 
+		plt.clf()
+		# -----------------------------------------
+		plt.plot(x_train, ytraindata, label='actual')
+		plt.plot(x_train, fx_mu_tr, label='pred. (mean)')
+		plt.plot(x_train, fx_low_tr, label='pred.(5th percen.)')
+		plt.plot(x_train, fx_high_tr, label='pred.(95th percen.)')
+		plt.fill_between(x_train, fx_low_tr, fx_high_tr, facecolor='g', alpha=0.4)
+		plt.legend(loc='upper right')
 
-			plt.title("Plot of Train Data vs MCMC Uncertainty ")
-			plt.savefig('mcmcresults/mcmcrestrain.png')
-			plt.savefig('mcmcresults/mcmcrestrain.svg', format='svg', dpi=600)
-			plt.clf()
+		plt.title("Train Data Uncertainty ")
+		plt.savefig('mcmctrain.png') 
+		plt.clf()
 
 		mpl_fig = plt.figure()
 		ax = mpl_fig.add_subplot(111)
 
 		ax.boxplot(pos_w)
 
-		ax.set_xlabel('[W1] [B1] [W2] [B2]')
+		ax.set_xlabel('[w0] [w1] [w3] [b]')
 		ax.set_ylabel('Posterior')
 
 		plt.legend(loc='upper right')
 
-		plt.title("Boxplot of Posterior W (weights and biases)")
-		plt.savefig('mcmcresults/w_pos.png')
-		plt.savefig('mcmcresults/w_pos.svg', format='svg', dpi=600)
+		plt.title("Posterior")
+		plt.savefig('w_pos.png') 
 
 		plt.clf()
+
+		import os
+		folder = 'posterior'
+		if not os.path.exists(folder):
+			os.makedirs(folder)
+
+		for i in range(pos_w.shape[1]):
+			histogram_trace(pos_w[:,i], folder+ '/'+ str(i))
 
 
 if __name__ == "__main__": main()
